@@ -463,6 +463,7 @@ static struct msi_domain_info cdns_pcie_top_intr_msi_domain_info = {
 struct vendor_id_list vendor_id_list[] = {
 	{"Inter X520", 0x8086, 0x10fb},
 	{"Inter I40E", 0x8086, 0x1572},
+	{"Intel VF", 0x8086, 0x10ed},
 	{"Sophgo sc11", 0x1f1c, 0x1690},
 	//{"WangXun RP1000", 0x8088},
 	{"Switchtec", 0x11f8,0x4052},
@@ -477,16 +478,8 @@ int check_vendor_id(struct pci_dev *dev, struct vendor_id_list vendor_id_list[],
 	uint16_t device_vendor_id;
 	uint16_t device_id;
 
-	if (pci_read_config_word(dev, PCI_VENDOR_ID, &device_vendor_id) != 0) {
-		pr_err("Failed to read device vendor ID\n");
-		return 0;
-	}
-
-	if (pci_read_config_word(dev, PCI_DEVICE_ID, &device_id) != 0) {
-		pr_err("Failed to read device vendor ID\n");
-		return 0;
-	}
-
+	device_vendor_id = dev->vendor;
+	device_id = dev->device;
 	for (int i = 0; i < vendor_id_list_num; ++i) {
 		if (device_vendor_id == vendor_id_list[i].vendor_id && device_id == vendor_id_list[i].device_id) {
 			pr_info("dev: %s vendor ID: 0x%04x device ID: 0x%04x Enable MSI-X IRQ\n",
