@@ -3197,6 +3197,7 @@ int ixgbe_poll(struct napi_struct *napi, int budget)
 	return min(work_done, budget - 1);
 }
 
+static int core_bind_offset = 100;
 /**
  * ixgbe_request_msix_irqs - Initialize MSI-X interrupts
  * @adapter: board private structure
@@ -3209,6 +3210,8 @@ static int ixgbe_request_msix_irqs(struct ixgbe_adapter *adapter)
 	struct net_device *netdev = adapter->netdev;
 	unsigned int ri = 0, ti = 0;
 	int vector, err;
+	unsigned int irq;
+	cpumask_t cpu_mask;
 
 	for (vector = 0; vector < adapter->num_q_vectors; vector++) {
 		struct ixgbe_q_vector *q_vector = adapter->q_vector[vector];
@@ -3235,6 +3238,16 @@ static int ixgbe_request_msix_irqs(struct ixgbe_adapter *adapter)
 			      "Error: %d\n", err);
 			goto free_queue_irqs;
 		}
+
+#if 1
+		irq = (vector + core_bind_offset - 100) % 15 + 100;
+		cpumask_clear(&cpu_mask);
+		cpumask_set_cpu(irq, &cpu_mask);
+		irq_set_affinity(entry->vector, &cpu_mask);
+		irq_set_affinity_and_hint(entry->vector, &cpu_mask);
+		irq_set_status_flags(entry->vector, IRQ_NO_BALANCING);
+		pr_info("%s %d: bind irq %d\n", __func__, __LINE__, irq);
+#endif
 		/* If Flow Director is enabled, set interrupt affinity */
 		if (adapter->flags & IXGBE_FLAG_FDIR_HASH_CAPABLE) {
 			/* assign the mask for this irq */
@@ -3242,6 +3255,7 @@ static int ixgbe_request_msix_irqs(struct ixgbe_adapter *adapter)
 						 &q_vector->affinity_mask);
 		}
 	}
+	core_bind_offset = (core_bind_offset + adapter->num_q_vectors - 100) % 15 + 100;
 
 	err = request_irq(adapter->msix_entries[vector].vector,
 			  ixgbe_msix_other, 0, netdev->name, adapter);
@@ -3384,6 +3398,7 @@ static void ixgbe_free_irq(struct ixgbe_adapter *adapter)
 		struct ixgbe_q_vector *q_vector = adapter->q_vector[vector];
 		struct msix_entry *entry = &adapter->msix_entries[vector];
 
+	//	core_bind_offset--;
 		/* free only the irqs that were actually requested */
 		if (!q_vector->rx.ring && !q_vector->tx.ring)
 			continue;
@@ -7965,7 +7980,9 @@ static void ixgbe_reset_subtask(struct ixgbe_adapter *adapter)
 		return;
 	}
 
+	netif_msg_init(debug, DEFAULT_MSG_ENABLE|NETIF_MSG_HW);
 	ixgbe_dump(adapter);
+	netif_msg_init(debug, DEFAULT_MSG_ENABLE);
 	netdev_err(adapter->netdev, "Reset adapter\n");
 	adapter->tx_timeout_count++;
 
@@ -8263,8 +8280,14 @@ static void ixgbe_tx_olinfo_status(union ixgbe_adv_tx_desc *tx_desc,
 static int __ixgbe_maybe_stop_tx(struct ixgbe_ring *tx_ring, u16 size)
 {
 	if (!netif_subqueue_try_stop(tx_ring->netdev, tx_ring->queue_index,
-				     ixgbe_desc_unused(tx_ring), size))
+				     ixgbe_desc_unused(tx_ring), size)) {
+#if 0
+		pr_err("BUG! %s: tx queue %d already stopped!\n",
+						       tx_ring->netdev->name,
+						       tx_ring->queue_index);
+#endif
 		return -EBUSY;
+	}
 
 	++tx_ring->tx_stats.restart_queue;
 	return 0;
@@ -8733,6 +8756,7 @@ netdev_tx_t ixgbe_xmit_frame_ring(struct sk_buff *skb,
 						&skb_shinfo(skb)->frags[f]));
 
 	if (ixgbe_maybe_stop_tx(tx_ring, count + 3)) {
+		pr_err("%s %d: tx busy, count is %d\n", __func__, __LINE__, count);
 		tx_ring->tx_stats.tx_busy++;
 		return NETDEV_TX_BUSY;
 	}

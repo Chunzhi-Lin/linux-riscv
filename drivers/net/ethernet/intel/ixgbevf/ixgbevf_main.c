@@ -1529,6 +1529,7 @@ static irqreturn_t ixgbevf_msix_clean_rings(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+static int core_bind_vf_offset = 116;
 /**
  * ixgbevf_request_msix_irqs - Initialize MSI-X interrupts
  * @adapter: board private structure
@@ -1542,6 +1543,8 @@ static int ixgbevf_request_msix_irqs(struct ixgbevf_adapter *adapter)
 	int q_vectors = adapter->num_msix_vectors - NON_Q_VECTORS;
 	unsigned int ri = 0, ti = 0;
 	int vector, err;
+	unsigned int irq;
+	cpumask_t cpu_mask;
 
 	for (vector = 0; vector < q_vectors; vector++) {
 		struct ixgbevf_q_vector *q_vector = adapter->q_vector[vector];
@@ -1569,7 +1572,17 @@ static int ixgbevf_request_msix_irqs(struct ixgbevf_adapter *adapter)
 			       err);
 			goto free_queue_irqs;
 		}
+#if 1
+		irq = (vector + core_bind_vf_offset - 116) % 12 + 116;
+		cpumask_clear(&cpu_mask);
+		cpumask_set_cpu(irq, &cpu_mask);
+		irq_set_affinity(entry->vector, &cpu_mask);
+		irq_set_affinity_and_hint(entry->vector, &cpu_mask);
+		irq_set_status_flags(entry->vector, IRQ_NO_BALANCING);
+		pr_info("%s %d: bind irq %d\n", __func__, __LINE__, irq);
+#endif
 	}
+	core_bind_vf_offset = (core_bind_vf_offset + q_vectors - 116 ) % 12 + 116;
 
 	err = request_irq(adapter->msix_entries[vector].vector,
 			  &ixgbevf_msix_other, 0, netdev->name, adapter);
