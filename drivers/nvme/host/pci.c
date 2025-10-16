@@ -1619,6 +1619,7 @@ static int nvme_setup_io_queues_trylock(struct nvme_dev *dev)
 	return 0;
 }
 
+static int nvme_bind_offset = 56;
 static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
 {
 	struct nvme_dev *dev = nvmeq->dev;
@@ -1656,6 +1657,28 @@ static int nvme_create_queue(struct nvme_queue *nvmeq, int qid, bool polled)
 		result = queue_request_irq(nvmeq);
 		if (result < 0)
 			goto release_sq;
+
+		int irq = pci_irq_vector(to_pci_dev(nvmeq->dev->dev), nvmeq->cq_vector);
+		if (irq > 0) {
+			cpumask_t cpu_mask;
+			int target_cpu = nvme_bind_offset;
+
+			cpumask_clear(&cpu_mask);
+			cpumask_set_cpu(target_cpu, &cpu_mask);
+
+			irq_set_affinity(irq, &cpu_mask);
+			int ret = irq_set_affinity_and_hint(irq, &cpu_mask);
+			if (ret) {
+				dev_warn(dev->ctrl.device,
+					"Failed to set affinity for IRQ%d (qid=%d) to CPU%d (err=%d)",
+					irq, qid, target_cpu, ret);
+			} else {
+				irq_set_status_flags(irq, IRQ_NO_BALANCING);
+				irq_modify_status(irq, 0 , IRQ_NO_BALANCING);
+				dev_info(dev->ctrl.device, "bind irq to %d\n", target_cpu);
+			}
+		}
+		nvme_bind_offset = (nvme_bind_offset  + 1 - 56) % 8 + 56;
 	}
 
 	set_bit(NVMEQ_ENABLED, &nvmeq->flags);
@@ -2280,6 +2303,7 @@ static unsigned int nvme_max_io_queues(struct nvme_dev *dev)
 	return num_possible_cpus() + dev->nr_write_queues + dev->nr_poll_queues;
 }
 
+#define MSIX_IRQ_MAX_QUEUES	4
 static int nvme_setup_io_queues(struct nvme_dev *dev)
 {
 	struct nvme_queue *adminq = &dev->queues[0];
@@ -2295,7 +2319,9 @@ static int nvme_setup_io_queues(struct nvme_dev *dev)
 	dev->nr_write_queues = write_queues;
 	dev->nr_poll_queues = poll_queues;
 
-	nr_io_queues = dev->nr_allocated_queues - 1;
+	nr_io_queues = min_t(unsigned int, MSIX_IRQ_MAX_QUEUES, dev->nr_allocated_queues - 1);
+	pr_info("### ioq:%u, wq:%u, pq:%u\n",
+			nr_io_queues, dev->nr_write_queues, dev->nr_poll_queues);
 	result = nvme_set_queue_count(&dev->ctrl, &nr_io_queues);
 	if (result < 0)
 		return result;

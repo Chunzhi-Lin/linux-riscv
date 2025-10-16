@@ -464,6 +464,7 @@ struct vendor_id_list vendor_id_list[] = {
 	{"Inter X520", 0x8086, 0x10fb},
 	{"Inter I40E", 0x8086, 0x1572},
 	{"Intel VF", 0x8086, 0x10ed},
+	{"Marvell Nvme", 0x1b4b, 0x1321},
 	{"Sophgo sc11", 0x1f1c, 0x1690},
 	//{"WangXun RP1000", 0x8088},
 	{"Switchtec", 0x11f8,0x4052},

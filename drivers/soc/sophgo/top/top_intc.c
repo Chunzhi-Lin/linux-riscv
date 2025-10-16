@@ -13,7 +13,7 @@
 
 #define MAX_IRQ_NUMBER 32
 #define TOP_INTC_NUM 2
-#define MSIX_IRQ_OFFSET 14
+#define MSIX_IRQ_OFFSET 10
 /*
  * here we assume all plic hwirq and tic hwirq should
  * be contiguous.
