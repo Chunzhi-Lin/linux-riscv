@@ -1649,6 +1649,8 @@ static void ixgbevf_free_irq(struct ixgbevf_adapter *adapter)
 		if (!adapter->q_vector[i]->rx.ring &&
 		    !adapter->q_vector[i]->tx.ring)
 			continue;
+		/* clear the affinity_mask in the IRQ descriptor */
+		irq_update_affinity_hint(adapter->msix_entries[i].vector, NULL);
 
 		free_irq(adapter->msix_entries[i].vector,
 			 adapter->q_vector[i]);

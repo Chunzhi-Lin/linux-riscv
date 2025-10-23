@@ -1453,8 +1453,11 @@ static void nvme_suspend_queue(struct nvme_dev *dev, unsigned int qid)
 	nvmeq->dev->online_queues--;
 	if (!nvmeq->qid && nvmeq->dev->ctrl.admin_q)
 		nvme_quiesce_admin_queue(&nvmeq->dev->ctrl);
-	if (!test_and_clear_bit(NVMEQ_POLLED, &nvmeq->flags))
+	if (!test_and_clear_bit(NVMEQ_POLLED, &nvmeq->flags)) {
+		int irq = pci_irq_vector(to_pci_dev(nvmeq->dev->dev), nvmeq->cq_vector);
+		irq_update_affinity_hint(irq, NULL);
 		pci_free_irq(to_pci_dev(dev->dev), nvmeq->cq_vector, nvmeq);
+	}
 }
 
 static void nvme_suspend_io_queues(struct nvme_dev *dev)
